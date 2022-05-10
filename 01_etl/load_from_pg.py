@@ -1,3 +1,4 @@
+import logging
 import os
 from time import sleep
 
@@ -12,6 +13,8 @@ from queries import *
 import psycopg2
 
 
+logging.basicConfig(level=logging.INFO)
+load_dotenv()
 BATCH_SIZE = 100
 
 
@@ -25,6 +28,7 @@ class Extraction:
     )
     def extract(self, modified):
         self.cursor.execute(self.query % modified)
+        logging.info("Data extracted.")
         while batch := self.cursor.fetchmany(BATCH_SIZE):
             yield from batch
 
@@ -93,6 +97,7 @@ class Load:
     )
     def load_data(self):
         self.es.index(index=self.index, id=self.data['id'], body=self.data, doc_type='_doc')
+        logging.info("Data loaded.")
 
 
 if __name__ == '__main__':
@@ -107,6 +112,7 @@ if __name__ == '__main__':
     }
     queries = {'movies': FW_QUERY, 'genres': GENRE_QUERY, 'persons': PERSON_QUERY}
     with psycopg2.connect(**dsl, cursor_factory=DictCursor) as pg_conn:
+        logging.info("PostgreSQL connection is open. Start load movies data.")
         while True:
             for index, query in queries.items():
                 e = Extraction(pg_conn, query)
