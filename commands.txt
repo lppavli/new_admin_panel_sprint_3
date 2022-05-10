@@ -1,0 +1,15 @@
+# список всех индексов
+curl http://localhost:9200/_aliases
+
+# удаление индекса
+curl -XDELETE http://localhost:9200/table2
+
+# просмотр индекса
+http://localhost:9200/test-index?pretty
+
+# просмотреть документы
+http://localhost:9200/test-index/_search?pretty
+
+# создание индекса
+curl -XPUT http://127.0.0.1:9200/genres -H 'Content-Type: application/json' -d '{ ... }'
+
