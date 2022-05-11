@@ -3,15 +3,14 @@ import os
 from time import sleep
 
 import backoff
-from urllib3.exceptions import HTTPError
+import psycopg2
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch, ElasticsearchException
 from psycopg2.extras import DictCursor
 
-from state import *
-from queries import *
-import psycopg2
-
+from queries import FW_QUERY, GENRE_QUERY, PERSON_QUERY, counts
+from state import JsonFileStorage, State
+from urllib3.exceptions import HTTPError
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -20,14 +19,14 @@ BATCH_SIZE = 100
 
 class Extraction:
     def __init__(self, conn, query_db):
-        self.cursor = conn.cursor()
+        self.cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         self.query = query_db
 
     @backoff.on_exception(
         wait_gen=backoff.expo, exception=(psycopg2.Error, psycopg2.OperationalError)
     )
     def extract(self, modified):
-        self.cursor.execute(self.query % modified)
+        self.cursor.execute(self.query % tuple([modified] * counts[self.query]))
         logging.info("Data extracted.")
         while batch := self.cursor.fetchmany(BATCH_SIZE):
             yield from batch
@@ -40,25 +39,25 @@ class Transform:
         self.cursor = conn.cursor()
 
     def transform(self):
-        res = []
+        res = {}
         d = self.data
         if self.index == 'movies':
             directors = [{'id': el['person_id'],
                           'name': el['person_name']}
-                         for el in d[7] if el['person_role'] == 'director']
+                         for el in d['persons'] if el['person_role'] == 'director']
             writers = [{'id': el['person_id'],
                         'name': el['person_name']}
-                       for el in d[7] if el['person_role'] == 'writer']
+                       for el in d['persons'] if el['person_role'] == 'writer']
             actors = [{'id': el['person_id'],
                        'name': el['person_name']}
-                      for el in d[7] if el['person_role'] == 'actor']
-            res = {'id': d[0],
-                   'title': d[1],
-                   'description': d[2],
-                   'type': d[4],
-                   'creation_date': d[5],
-                   'rating': d[3],
-                   'modified': d[6],
+                      for el in d['persons'] if el['person_role'] == 'actor']
+            res = {'id': d['id'],
+                   'title': d['title'],
+                   'description': d['description'],
+                   'type': d['type'],
+                   'creation_date': d['created'],
+                   'rating': d['rating'],
+                   'modified': d['modified'],
                    'directors': directors,
                    'writers': writers,
                    'actors': actors}
@@ -68,18 +67,17 @@ class Transform:
                    'description': d['genre_description'],
                    'modified': d['modified']}
         elif self.index == 'persons':
-            roles = ', '.join(d[4])
+            roles = ', '.join(d['roles'])
             films = [{'id': el["fw_id"],
                       'rating': el['fw_rating'],
                       'title': el['fw_title'],
                       'type': 'fw_type'}
-                     for el in d[3]]
-            res = {'id': d[0],
-                   'name': d[1],
-                   'modified': d[2],
+                     for el in d['films']]
+            res = {'id': d['id'],
+                   'name': d['full_name'],
+                   'modified': d['modified'],
                    'roles': roles,
                    'films': films}
-
         return res
 
 
@@ -100,8 +98,7 @@ class Load:
         logging.info("Data loaded.")
 
 
-if __name__ == '__main__':
-    load_dotenv()
+def main():
     state = State(JsonFileStorage('state.json'))
     dsl = {
         'dbname': os.getenv('DB_NAME', 'movies_database'),
@@ -123,3 +120,7 @@ if __name__ == '__main__':
                     Load(pg_conn, index, data_t).load_data()
                     state.set_state(state_key, data_t["modified"].isoformat())
             sleep(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -21,7 +21,7 @@ class JsonFileStorage(BaseStorage):
 
     def save_state(self, state: dict) -> None:
         if self.file_path is None:
-            return None
+            raise Exception('File not found')
 
         with open(self.file_path, 'w') as f:
             json.dump(state, f)
@@ -35,7 +35,7 @@ class JsonFileStorage(BaseStorage):
             return data
         except FileNotFoundError:
             self.save_state({})
-        return {}
+            return {}
 
 
 class State:
