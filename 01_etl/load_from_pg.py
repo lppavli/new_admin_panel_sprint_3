@@ -60,7 +60,8 @@ class Transform:
                    'modified': d['modified'],
                    'directors': directors,
                    'writers': writers,
-                   'actors': actors}
+                   'actors': actors,
+                   'genres': d['genres']}
         elif self.index == 'genres':
             res = {'id': d['genre_id'],
                    'name': d['genre_name'],
